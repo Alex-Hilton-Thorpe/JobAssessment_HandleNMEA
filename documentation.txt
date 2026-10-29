@@ -1,0 +1,162 @@
+S3C Assessment
+
+Problem:
+- what to do: Write the handleSentence function
+  -> what will the inputted sentence look like?
+
+Firstly break down problem statement:
+
+1) AIS - Automatic Identification System
+
+- Automatic tracking system, uses VHF radio (Very High Frequency) transceivers to broadcast data
+- AIS equipment needs to report position info
+- Pos info -> GNSS module outputs NMEA sentences on serial port
+
+2) GNSS - Global Navigation Satellite System
+
+- Umbrella term for all satellite nav systems
+- It's job -> Brain, "where am I?"
+  * receives signals from sats orbiting earth and gets latitude, longitude, speed, and time
+
+3) NMEA Sentences - National Marine Electronics Association
+
+- Standard to talk between electronics
+- Once GNSS figures out location -> Translates maths into NMEA sentence
+  eg. $GPGLL,4916.45,N,12311.12,W,225444,A*10
+
+4) Serial Port
+
+- Physical hardware interface
+- Physical highway - carries NMEA sentences one bit at a time
+
+5) GGA sentence - Global positioning system fix data
+
+- standard NMEA 0183 Protocol sentences explained string
+- Reading GGA sentence:
+
+$--GGA,hhmmss.ss,llll.ll,a,yyyy.yy,a,x,xx,x.x,x.x,M,x.x,M,x.x,xxxx*hh<CR><LF>
+
+1) hhmmss.ss - UTC of position
+2) llll.ll, a - Latitude, N/S (North/South)
+3) yyyy.yy, a - Longitude, E/W (East/West)
+4) x - GPS quality indicator (page 73)
+5) xx - Number of satellites used (00-12), may differ from number in view
+6) x.x - Horizontal dilution of precision (indicates accuracy based on satellite geometry, lower the better)
+7) x.x - Antenna altitude, above/below (mean sea level)
+8) M - units for 7)
+9) x.x - Geoidal separation: Difference between the WGS-84 earth ellipsoid surface and mean sea level (if earth was perfectly smooth). If "-" then you have dropped below the perfect model.
+10) M - units for 9)
+11) x.x - Age of differential GPS data, time in seconds since last update
+12) xxxx*hh<CR><LF> - Differential reference station ID, 0000-1023
+    *hh = checksum (security)
+
+Algorithm / logic:
+
+loop sentence
+  -> loop through each word part
+  -> does that part match its corresponding GGA part
+  -> check if valid
+  -> return true if all valid
+
+words[0] = fields
+-> stores pointer to first variable
+
+Then check each next character for ',' or '*' and replaces with '\0' (null)
+
+Then words[wordCount] = &fields[i + 1]
+-> words[wordCount] stores pointer to first letter of that word
+
+In total this breaks down words into the first letter being a pointer pointed to in words[]
+
+To use words[] -> just say words[]
+
+strstr( , ) - checks if a string exists in another string
+strcmp( , ) - checks if strings are identical
+
+Talker IDs:
+-> Just checking '$' and 'GGA'
+
+To convert str to number take its ascii number and minus '0' -> gives ascii value
+So '0' = 48 and '1' = 49
+49 - 48 = 1
+
+strspn() -> returns number of characters in both strings, counts until no matches
+
+since using unsigned -> can't go lower than 0 -> if so goes to 255
+
+Latitude field:
+
+- 2 fixed degrees
+- 2 fixed digits minutes
+- variable fraction minutes
+- Decimal points & fraction are optional
+
+2 units - degrees must be from 0-90
+2 units - minutes must be from 0-59
+
+if degrees = 90 decimals dne
+fractions are variable / can be null
+can be null but if so case 3 must also be null
+longitude follows the same
+
+General:
+max num characters = 82
+min number fields = 1
+
+Quality indicator:
+0 = not valid
+1 = GPS SPS mode
+2 = differential GPS, SPS mode
+3 = GPS PPS mode
+4 = Real Time Kinematic, sat system used in RTK mode with fixed ints
+5 = Float RTK, sat system used in RTK mode
+6 = dead
+7 = manual input
+8 = simulator
+
+Can't be null
+
+Num Sats: 00 - 12
+reject 0, 1, 2, 3 etc
+must be 00, 01, 02 etc
+
+as xx -> can't find anything else in doc
+
+Null not accepted
+
+HDOP:
+Can't find much in document
+Assumptions:
+
+- fraction is optional
+- no range limit
+- must be positive
+- null is valid
+- reject 0
+
+check that it starts with number
+-> make sure next character is either null or a '.'
+-> If '.' check that string continues and that the rest of the values contain numbers until the end.
+
+Antenna alt:
+
+same as HDOP
+
+Assumption:
+
+- can be negative
+- number can be decimal
+- no real limit
+- null is valid - units should be null then
+units always 'M' even when above is null
+
+Geoidal separation:
+same idea as antenna altitude
+
+Age of differential:
+same as HDOP
+- fraction optional
+- no range limit
+- positive
+- null = valid
+- reject 0
