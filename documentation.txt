@@ -32,8 +32,9 @@ Firstly break down problem statement:
 5) GGA sentence - Global positioning system fix data
 
 - standard NMEA 0183 Protocol sentences explained string
-- Reading GGA sentence:
 
+
+Reading GGA sentence:
 $--GGA,hhmmss.ss,llll.ll,a,yyyy.yy,a,x,xx,x.x,x.x,M,x.x,M,x.x,xxxx*hh<CR><LF>
 
 1) hhmmss.ss - UTC of position
@@ -50,20 +51,14 @@ $--GGA,hhmmss.ss,llll.ll,a,yyyy.yy,a,x,xx,x.x,x.x,M,x.x,M,x.x,xxxx*hh<CR><LF>
 12) xxxx*hh<CR><LF> - Differential reference station ID, 0000-1023
     *hh = checksum (security)
 
-Algorithm / logic:
-
-loop sentence
-  -> loop through each word part
-  -> does that part match its corresponding GGA part
-  -> check if valid
-  -> return true if all valid
+Function logic:
 
 words[0] = fields
 -> stores pointer to first variable
 
-Then check each next character for ',' or '*' and replaces with '\0' (null)
+Check each next character for ',' or '*' and replaces with '\0' (null)
 
-Then words[wordCount] = &fields[i + 1]
+Words[wordCount] = &fields[i + 1]
 -> words[wordCount] stores pointer to first letter of that word
 
 In total this breaks down words into the first letter being a pointer pointed to in words[]

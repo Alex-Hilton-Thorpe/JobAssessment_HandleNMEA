@@ -3,6 +3,16 @@
 #include <stdint.h>
 #include <stdio.h>
 
+typedef struct
+{
+    const char *sentence;
+    bool expected;
+    const char *description;
+} TestCase;
+
+#define PASS_CASE(s, d) {s, true, d}
+#define FAIL_CASE(s, d) {s, false, d}
+
 // This function is responsible for handling NMEA sentences.
 // Returns TRUE if there are no errors in the sentence, otherwise returns FALSE.
 bool handleSentence(char *sentence)
@@ -277,9 +287,131 @@ bool handleSentence(char *sentence)
 // This main function is used to test and validate the handleSentence function.
 int main(void)
 {
-    char sentence[] = "$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47";
+     TestCase tests[] = {
+        // ---- Should be TRUE ----
+        PASS_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Base"),
+        PASS_CASE("$GNGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "GN talker"),
+        PASS_CASE("$GPGGA,123519.00,,,,,0,00,,,M,,M,,*47", "No fix"),
+        PASS_CASE("$GPGGA,123519.00,,,,,0,00,,,,,,,*47", "No fix, empty units"),
+        PASS_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,3.0,0123*47", "Differential"),
+        PASS_CASE("$GPGGA,000000,0000.000,N,00000.000,E,1,00,0,0,M,0,M,0,0000*47", "Minimum values"),
+        PASS_CASE("$GPGGA,235959.999,9000.000,S,18000.000,W,8,12,99.9,9999.9,M,-999.9,M,99.9,1023*47", "Maximum values"),
+        PASS_CASE("$GPGGA,123519,4807,N,01131,E,1,08,1,545,M,46,M,,*47", "No fractions"),
+        PASS_CASE("$GPGGA,123519.5,4807.0,S,01131.0,W,1,08,0.9,-12.5,M,-46.9,M,,*47", "Negative values, S/W"),
+        PASS_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,,M,,M,,*47", "Empty altitude/geoid"),
+        PASS_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47\r\n", "CR LF ending"),
+        PASS_CASE("$GPGGA,123519.00,,,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Latitude empty, longitude present"),
 
-    printf("%s\n", handleSentence(sentence) ? "true" : "false");
+        // ---- FALSE: framing / type ----
+        FAIL_CASE("$GPGSA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Wrong type"),
+        FAIL_CASE("$GPGGAX,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Type too long"),
+        FAIL_CASE("GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Missing dollar"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,", "Missing asterisk"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,,*47", "17 words"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,*47", "15 words"),
+        FAIL_CASE("", "Empty sentence"),
+        FAIL_CASE("$GPGGA", "Header only"),
 
-    return 0;
+        // ---- FALSE: time ----
+        FAIL_CASE("$GPGGA,240000.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Hour 24"),
+        FAIL_CASE("$GPGGA,126000.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Minute 60"),
+        FAIL_CASE("$GPGGA,123561.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Second 61"),
+        FAIL_CASE("$GPGGA,12351.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Five time digits"),
+        FAIL_CASE("$GPGGA,123519.,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Time bare dot"),
+        FAIL_CASE("$GPGGA,12a519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Time letter"),
+        FAIL_CASE("$GPGGA,,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Empty time"),
+        FAIL_CASE("$GPGGA,123519.0.0,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Time two dots"),
+
+        // ---- FALSE: latitude / longitude ----
+        FAIL_CASE("$GPGGA,123519.00,9100.000,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Latitude 91"),
+        FAIL_CASE("$GPGGA,123519.00,9030.000,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Latitude 90 degrees 30"),
+        FAIL_CASE("$GPGGA,123519.00,9000.500,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Latitude beyond 90"),
+        FAIL_CASE("$GPGGA,123519.00,4860.000,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Latitude minutes 60"),
+        FAIL_CASE("$GPGGA,123519.00,480.7,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Latitude three digits"),
+        FAIL_CASE("$GPGGA,123519.00,4807.,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Latitude bare dot"),
+        FAIL_CASE("$GPGGA,123519.00,-4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Negative latitude"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Missing N/S"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,X,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Invalid N/S"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,n,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Lowercase latitude direction"),
+        FAIL_CASE("$GPGGA,123519.00,,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Latitude empty, direction present"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,18100.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Longitude 181"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,18030.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Longitude 180 degrees 30"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,18000.500,E,1,08,0.9,545.4,M,46.9,M,,*47", "Longitude beyond 180"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01160.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Longitude minutes 60"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,1131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Longitude four digits"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.,E,1,08,0.9,545.4,M,46.9,M,,*47", "Longitude bare dot"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,,,1,08,0.9,545.4,M,46.9,M,,*47", "Latitude present, longitude missing"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,,1,08,0.9,545.4,M,46.9,M,,*47", "Missing E/W"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,N,1,08,0.9,545.4,M,46.9,M,,*47", "Wrong E/W"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,E,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47", "Latitude uses E"),
+
+        // ---- FALSE: quality / satellites / HDOP ----
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,9,08,0.9,545.4,M,46.9,M,,*47", "Quality 9"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,,08,0.9,545.4,M,46.9,M,,*47", "Empty quality"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,12,08,0.9,545.4,M,46.9,M,,*47", "Two-digit quality"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,A,08,0.9,545.4,M,46.9,M,,*47", "Quality letter"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,13,0.9,545.4,M,46.9,M,,*47", "13 satellites"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,8,0.9,545.4,M,46.9,M,,*47", "One-digit satellites"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,008,0.9,545.4,M,46.9,M,,*47", "Three-digit satellites"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,0a,0.9,545.4,M,46.9,M,,*47", "Satellite letter"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,.5,545.4,M,46.9,M,,*47", "HDOP no leading digit"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,5.,545.4,M,46.9,M,,*47", "HDOP bare dot"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,1.2.3,545.4,M,46.9,M,,*47", "HDOP two dots"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,-0.9,545.4,M,46.9,M,,*47", "Negative HDOP"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,abc,545.4,M,46.9,M,,*47", "HDOP letters"),
+
+        // ---- FALSE: altitude / geoid / units ----
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,-,M,46.9,M,,*47", "Altitude minus only"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,--5,M,46.9,M,,*47", "Altitude double minus"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,+5,M,46.9,M,,*47", "Altitude plus sign"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,5.,M,46.9,M,,*47", "Altitude bare dot"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,5a,M,46.9,M,,*47", "Altitude letter"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,,46.9,M,,*47", "Altitude unit missing"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,m,46.9,M,,*47", "Lowercase altitude unit"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,F,46.9,M,,*47", "Wrong altitude unit"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,MM,46.9,M,,*47", "Altitude unit too long"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,,F,46.9,M,,*47", "Empty altitude, bad unit"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,-,M,,*47", "Geoid minus only"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,4a,M,,*47", "Geoid letter"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,,,*47", "Geoid unit missing"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,X,,*47", "Wrong geoid unit"),
+
+        // ---- FALSE: age / station ID ----
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,-3,0123*47", "Negative age"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,3.,0123*47", "Age bare dot"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,3a,0123*47", "Age letter"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,3.0,1024*47", "Station ID 1024"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,3.0,9999*47", "Station ID 9999"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,3.0,123*47", "Station ID three digits"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,3.0,12345*47", "Station ID five digits"),
+        FAIL_CASE("$GPGGA,123519.00,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,3.0,12a4*47", "Station ID letter")
+    };
+
+    int total = (int)(sizeof(tests) / sizeof(tests[0]));
+    int passed = 0;
+
+    for (int i = 0; i < total; i++)
+    {
+        // handleSentence modifies its input, so copy each test first.
+        char sentence[256];
+        snprintf(sentence, sizeof(sentence), "%s", tests[i].sentence);
+
+        bool actual = handleSentence(sentence);
+
+        printf("%s | %-32s | Expected: %c | Got: %c\n",
+               actual == tests[i].expected ? "PASS" : "FAIL",
+               tests[i].description,
+               tests[i].expected ? 'T' : 'F',
+               actual ? 'T' : 'F');
+
+        if (actual == tests[i].expected)
+        {
+            passed++;
+        }
+    }
+
+    printf("\nTests passed: %d/%d\n", passed, total);
+    printf("Tests failed: %d/%d\n", total - passed, total);
+
+    return passed == total ? 0 : 1;
 }
